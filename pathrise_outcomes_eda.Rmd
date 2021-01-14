@@ -1,0 +1,168 @@
+---
+title: "pathrise"
+output: html_notebook
+---
+
+This notebook analyzes the [raw data](https://www.pathrise.com/outcomes.pdf) from [Pathrise](https://www.pathrise.com/). Pathrise is a career mentoring startup that connects with students and early career individuals who are looking for a job. Sandesh Shrestha reached out to me on 12 Jan 2021 about my pursuit of a "data role in a big tech company." 
+
+After taking a look at the website, I found self-reported outcomes of their clients. It must be stated that Pathrise does not only focus on clients who aspire to be in data science; they also help students who are seeking roles in Software Engineering, Product, Strategy, and Ops, Product Design, Marketing, and Sales.
+
+#Load necessary libraries into workspace
+
+```{r load necessary libraries}
+pacman::p_load("tidyverse", "readxl", "tidytext", "wordcloud", "tm", "ggplot2")
+```
+
+#Load the data into the global environment
+
+```{r load data}
+# Load data into environment
+df <- read_csv("data/numeric-data/pathrise_outcomes.csv")
+
+```
+#Preprocess dataframe
+
+```{r clean dataframe}
+#Remove dollar sign from salary column
+df$Salary <- as.numeric(gsub('[$,]', '', df$Salary))
+#Drop empty columns
+df <- df %>% 
+  select(-c("X4","X5","X6"))
+
+# Change names and correct for data types
+df <- df %>% 
+  # Change names for column headers
+  rename(salary_usd = Salary) %>% 
+  rename(company = Company) %>% 
+  rename(placement_months = `Placement (Time in Months)`) %>% 
+  # Confirm data types for columns
+  mutate(salary_usd = as.numeric(salary_usd)) %>% 
+  mutate(company = as.character(company)) %>% 
+  mutate(placement_months = as.numeric(placement_months))
+
+# Preview dataframe
+head(df, 10)
+
+```
+
+#Exploratory Data Analysis
+
+##Mean values of salray and placement time
+Descriptive statistics for the numeric values and wordcloud for the companies
+```{r descriptive stats}
+
+#Summarize stats for numeric data 
+summary_df <- df %>% 
+  summarise(mean_sal = mean(salary_usd), 
+            mean_plac = mean(placement_months),
+            med_sal = median(salary_usd),
+            med_plac = median(placement_months),
+            std_sal = sd(salary_usd),
+            std_plac = sd(placement_months),
+            min_sal = min(salary_usd),
+            min_plac = min(placement_months),
+            max_sal = max(salary_usd),
+            max_plac = max(placement_months))
+
+summary_df
+```
+
+
+```{r wordcloud}
+# Visualize companies
+corp <- SimpleCorpus(VectorSource(df$company))
+tm <- corp %>% tm_map(function(x) removeWords(tolower(x), stopwords("en"))) %>%
+  gsub('[[:punct:] ]+',' ', .) %>% 
+  gsub('inc', ' ', .) %>% 
+  gsub('unreported', ' ', .) %>% 
+  gsub('data', ' ', .) %>% 
+  gsub('com', ' ', .) %>% 
+  gsub('llc', ' ', .)
+# Generate wordcloud
+wordcloud(tm, colors=brewer.pal(6,"Dark2"), random.order=FALSE)
+
+```
+
+
+#Distributions of salary and placement time
+```{r distributions}
+# Salary
+df %>% 
+  ggplot(aes(x = salary_usd))+
+  geom_boxplot()+
+  labs(x = "Salary (USD)")+
+  scale_x_continuous(labels = scales::dollar_format())+
+  theme(axis.text.y = element_blank())
+
+# Placement Time
+df %>% 
+  ggplot(aes(x = placement_months))+
+  geom_density()+
+  labs(x = "Months Before Signing an Offer",
+       y = "Density")
+
+```
+
+#Bar/Scatter Plot with placements and salary
+```{r comparative plots}
+
+df %>% 
+  ggplot(aes(x = salary_usd))+
+  geom_histogram(aes(y = ..density..),
+                 bins = 30, 
+                 breaks = seq(40000,300000, by = 15000),
+                 col = "black",
+                 alpha = 0.3) +
+  geom_density(alpha = 0.2, fill = "#ff66a3") +
+  labs(y = "Count",
+       x = "Salary (USD)") +
+  scale_x_continuous(labels = scales::dollar_format())
+
+df %>% 
+  ggplot(aes(x = placement_months))+
+  geom_histogram(bins = 15,
+                 col = "black",
+                 alpha = 0.3) +
+  labs(y = "Count",
+       x = "Months Before Signing an Offer")
+
+```
+```{r comparative plots continued}
+#Scatterplot
+df %>%
+  ggplot(aes(x= placement_months, y= salary_usd, label=company))+
+  geom_point() +
+  geom_text(aes(label=ifelse(company=="Microsoft",
+                             as.character(company),'')), hjust=0,vjust=0)+
+  labs(x = "Placement Time (months)", y = "Salary (USD)")
+
+```
+
+Examine jobs that were secured in four months or less
+```{r short term to hire}
+
+df %>%
+  filter(placement_months <= 4) %>% 
+  ggplot(aes(x = salary_usd))+
+  geom_histogram(bins = 15, 
+                 breaks = seq(40000,300000, by = 15000),
+                 col = "black",
+                 alpha = 0.3) +
+  labs(title = "Salaries for Placements in Four Months or Less",
+       y = "Count",
+       x = "Salary (USD)") +
+  scale_x_continuous(labels = scales::dollar_format())
+
+df %>%
+  filter(placement_months <= 4) %>%
+  filter(salary_usd >= 80000 & salary_usd <= 130000) %>% 
+  ggplot(aes(x = salary_usd))+
+  geom_histogram(aes(y = ..density..),
+                 col = "black",
+                 alpha = 0.4,
+                 bins = 15)+
+  geom_density(alpha = 0.3, fill = "#ff66a3")+
+  scale_x_continuous(labels = scales::dollar_format())
+  
+```
+
